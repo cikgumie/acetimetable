@@ -103,9 +103,9 @@ function readLesson(r, h) {
   [groups, p] = readList(r, p);
   [teachers, p] = readList(r, p);
   [rooms, p] = readList(r, p);
-  // verified against placed cards: first field = periods per card, second = cards per week
+  // verified against the original program display: first field = (periods per card - 1), second = cards per week
   if (!(count >= 0 && count < 20 && len > 0 && len < 100)) throw new Error('bad lesson');
-  return { periodsPerCard: Math.max(1, count), cardsPerWeek: len, subject, groups, teachers, rooms };
+  return { periodsPerCard: count + 1, cardsPerWeek: len, subject, groups, teachers, rooms };
 }
 
 function readClassGroups(r, h) {
@@ -153,7 +153,8 @@ function findCards(r, start, end, lessonCount, periodCount, roomCount) {
     if (r.i32(q + 8) !== 0 || b[q + 20] !== 0 || r.i32(q + 21) !== -1) continue;
     const days = r.i32(q + 12), weeks = r.i32(q + 16), period = r.i32(q), dur = r.i32(q + 4);
     if (days <= 0 || days > 0x7f || weeks <= 0 || weeks > 0xffff) continue;
-    if (period < 0 || period >= Math.max(periodCount, 1) || dur < 0 || dur > 20) continue;
+    // period is the period *number* (1-based in files we tested), not an array index
+    if (period < 0 || period > Math.max(periodCount, 1) + 1 || dur < 0 || dur > 20) continue;
     let found = null;
     for (let n = 0; n <= 8 && !found; n++) {
       const p = q - 4 * n; // list start
@@ -172,6 +173,27 @@ function findCards(r, start, end, lessonCount, periodCount, roomCount) {
     q += 24;
   }
   return cards;
+}
+
+// Availability matrix: dayCount rows x 32 int32, indexed by period number.
+// 4 = available, 0 = not available (shown as "x" in the original program), 6 = no such period.
+function readTimeoff(r, start, end, periodNums, dayCount) {
+  const nums = new Set(periodNums), maxNum = Math.max(...periodNums);
+  const need = dayCount * 128;
+  outer: for (let p = start; p + need <= end; p++) {
+    if (r.i32(p) !== 6 && nums.has(0) === false) continue; // slot for period 0 is unused
+    for (let d = 0; d < dayCount; d++) {
+      for (let k = 0; k < 32; k++) {
+        const v = r.i32(p + d * 128 + k * 4);
+        if (v < 0 || v > 6) continue outer;
+        if (nums.has(k) ? v === 6 : (k > maxNum && v !== 6)) continue outer;
+      }
+    }
+    const blocked = [];
+    periodNums.forEach((num, i) => { for (let d = 0; d < dayCount; d++) if (r.i32(p + d * 128 + num * 4) === 0) blocked.push(`${d}-${i}`); });
+    return blocked;
+  }
+  return null;
 }
 
 export async function readAscFile(fileBytes, fileName = '') {
@@ -245,6 +267,13 @@ export async function readAscFile(fileBytes, fileName = '') {
   for (const c of rawCards) for (let d = 0; d < 16; d++) if (c.days & (1 << d)) maxBit = Math.max(maxBit, d);
   const dayCount = maxBit + 1;
 
+  // card period numbers -> period array index
+  const numToIdx = new Map(periods.map((p, i) => [p.num, i]));
+  for (const c of rawCards) c.period = numToIdx.has(c.period) ? numToIdx.get(c.period) : c.period - 1;
+
+  const nums = periods.map(p => p.num);
+  const toff = h => (nums.length ? readTimeoff(r, h.after, h.pos + h.size, nums, dayCount) : null) || [];
+
   return {
     meta: { version, magic, fileName, warnings, counts: {
       periods: periods.length, grades: gradeH.length, subjects: subjectH.length, teachers: teacherH.length,
@@ -252,11 +281,11 @@ export async function readAscFile(fileBytes, fileName = '') {
     dayCount,
     periods,
     grades: gradeH.map(h => ({ name: h.name, short: h.short })),
-    subjects: subjectH.map(h => ({ name: h.name, short: h.short, color: h.color })),
-    teachers: teacherH.map(h => ({ name: h.name, short: h.short, color: h.color })),
-    classes: classH.map((h, i) => ({ name: h.name, short: h.short, color: h.color, groups: classInfo[i].groups })),
+    subjects: subjectH.map(h => ({ name: h.name, short: h.short, color: h.color, timeoff: toff(h) })),
+    teachers: teacherH.map(h => ({ name: h.name, short: h.short, color: h.color, timeoff: toff(h) })),
+    classes: classH.map((h, i) => ({ name: h.name, short: h.short, color: h.color, groups: classInfo[i].groups, timeoff: toff(h) })),
     groups,
-    rooms: roomH.map(h => ({ name: h.name, short: h.short, color: h.color })),
+    rooms: roomH.map(h => ({ name: h.name, short: h.short, color: h.color, timeoff: toff(h) })),
     lessons,
     cards: rawCards,
   };

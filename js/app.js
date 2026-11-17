@@ -493,6 +493,7 @@ VIEWS.semua = () => {
     <tr><th></th>${S.days.map(() => S.periods.map((p, i) => `<th class="${i === 0 ? 'dsep' : ''}">${esc(p.short)}</th>`).join('')).join('')}</tr></thead><tbody>
     ${ents.map(e => `<tr data-open="${e.id}" style="cursor:pointer"><th>${esc(e.short)}</th>${S.days.map((d, di) => S.periods.map((p, pi) => {
       const it = cellMap[`${e.id}|${di}-${pi}`] || [];
+      if (!it.length && (S.timeoff[`${mode}:${e.id}`] || []).includes(`${di}-${pi}`)) return `<td class="${pi === 0 ? 'dsep' : ''} muted" title="Tidak tersedia">×</td>`;
       const bad = it.some(x => clashes.has(x.c.id));
       const txt = it.map(x => mode === 't' ? lessonLabel(S, x.l, ix).cls : ix.subject[x.l.subjectId]?.short).join('/');
       return `<td class="${pi === 0 ? 'dsep' : ''}" style="${it[0] ? `background:${esc(ix.subject[it[0].l.subjectId]?.color)};color:${ink(ix.subject[it[0].l.subjectId]?.color)}` : ''};${bad ? 'outline:2px solid var(--danger);outline-offset:-2px' : ''}" title="${esc(txt)}">${esc(txt)}</td>`;

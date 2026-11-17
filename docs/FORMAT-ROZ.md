@@ -36,6 +36,9 @@ Kelas menyisipkan penanda `CString "CLASSTT"` sebelum nama dan berakhir dengan `
 
 1. Objek tetapan hari/minggu (13 objek)
 2. **Waktu**: `int32 nombor, 3 bait, CString nama, CString singkatan, int32 jamMula, minitMula, jamTamat, minitTamat`, diikuti matriks ketersediaan besar
+
+   **Matriks masa tidak tersedia** (dalam rekod subjek, guru, kelas, bilik): `bilHari × 32 × int32`, diindeks ikut nombor waktu.
+   `4` = tersedia, `0` = tidak tersedia (tanda × dalam program asal), `6` = waktu tidak wujud.
 3. **Gred** (bilangan didahului `int32`)
 4. **Subjek**
 5. **Guru** — rekod mengandungi semula nama pertama/nama akhir sebagai CString berasingan (digunakan untuk mengesan sempadan subjek/guru)
@@ -44,7 +47,7 @@ Kelas menyisipkan penanda `CString "CLASSTT"` sebelum nama dan berakhir dengan `
 8. **Bilik**
 9. **Pelajaran** (nama kosong) — selepas singkatan:
    ```
-   11 bait, int32 waktuSetiapKad, int32 kadSeminggu, 5 bait, int32, int32,
+   11 bait, int32 (waktuSetiapKad − 1), int32 kadSeminggu, 5 bait, int32, int32,
    int32 indeksSubjek,
    int32 n, n × indeksKumpulan,
    int32 n, n × indeksGuru,
@@ -53,7 +56,7 @@ Kelas menyisipkan penanda `CString "CLASSTT"` sebelum nama dan berakhir dengan `
 10. **Kad** (tanpa pengepala objek), disusun mengikut indeks pelajaran:
    ```
    int32 indeksPelajaran, int32 n, n × indeksBilik (-1 = tiada),
-   int32 waktu (0-based), int32 tempoh, int32 0, int32 topengHari (bit0 = hari 1), int32 topengMinggu,
+   int32 nomborWaktu (1-based), int32 (tempoh − 1), int32 0, int32 topengHari (bit0 = hari 1), int32 topengMinggu,
    00 FFFFFFFF, 28 × 00, int32 1, …
    ```
    Jika `int32` selepas `00 FFFFFFFF` kad sebelumnya bernilai 1, kad berikutnya menyimpan **indeks bilik
@@ -68,8 +71,9 @@ Kelas menyisipkan penanda `CString "CLASSTT"` sebelum nama dan berakhir dengan `
 | v802 `.roz` / `.ziptt` | 677 daripada 678 (semua kelas penuh) | 0 |
 
 Sifar pertembungan dalam jadual siap ialah bukti kukuh bahawa indeks pelajaran, kumpulan, guru, hari dan waktu dinyahkod dengan betul.
+Kedudukan, tempoh kad dan tanda × juga dibandingkan dengan tangkapan skrin program asal bagi fail yang sama dan didapati sepadan.
 
 ## Belum dinyahkod
 
-Kekangan lanjutan, matriks ketersediaan (masa tidak tersedia), murid & pilihan subjek, reka bentuk cetakan,
+Kekangan lanjutan, murid & pilihan subjek, reka bentuk cetakan,
 dan format lama (< v600). Untuk fail versi lain, eksport XML dari aplikasi asal dan import XML.

@@ -27,6 +27,8 @@ export async function importRoz(bytes, name) {
   const rooms = d.rooms.map(x => ({ id: uid('r'), name: x.name, short: x.short || x.name }));
   const classes = d.classes.map((x, i) => ({ id: uid('c'), name: x.name, short: x.short || x.name, color: x.color || pickColor(i) }));
   s.subjects = subjects; s.teachers = teachers; s.rooms = rooms; s.classes = classes;
+  const addOff = (prefix, list, src) => src.forEach((x, i) => { if (x.timeoff?.length) s.timeoff[`${prefix}:${list[i].id}`] = x.timeoff; });
+  addOff('s', subjects, d.subjects); addOff('t', teachers, d.teachers); addOff('r', rooms, d.rooms); addOff('c', classes, d.classes);
   const groupMap = new Map();
   d.groups.forEach((g, gi) => {
     if (g.cls < 0 || !classes[g.cls]) return;
