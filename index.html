@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jadual Web</title>
+<meta name="description" content="Penyusun jadual waktu sekolah berasaskan web: data, penjana automatik, paparan, cetak dan guru ganti.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23245c8f'/%3E%3Cpath d='M7 9h18M7 16h18M7 23h18M13 6v20M20 6v20' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar no-print">
+  <div class="brand"><span class="logo" aria-hidden="true"></span><span>Jadual Web</span></div>
+  <div class="school" id="schoolName"></div>
+  <button class="btn ghost menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+</header>
+<div class="layout">
+  <nav class="sidebar no-print" id="nav">
+    <a href="#utama" data-v="utama">🏠 Utama</a>
+    <div class="nav-h">Data</div>
+    <a href="#sekolah" data-v="sekolah">🏫 Sekolah &amp; waktu</a>
+    <a href="#subjek" data-v="subjek">📚 Subjek</a>
+    <a href="#guru" data-v="guru">👩‍🏫 Guru</a>
+    <a href="#kelas" data-v="kelas">🎓 Kelas</a>
+    <a href="#bilik" data-v="bilik">🚪 Bilik</a>
+    <a href="#pelajaran" data-v="pelajaran">🧩 Pelajaran</a>
+    <div class="nav-h">Jadual</div>
+    <a href="#jadual" data-v="jadual">🗓️ Susun jadual</a>
+    <a href="#semua" data-v="semua">📋 Semua kelas</a>
+    <a href="#jana" data-v="jana">⚙️ Jana automatik</a>
+    <a href="#relief" data-v="relief">🔁 Guru ganti</a>
+    <a href="#cetak" data-v="cetak">🖨️ Cetak</a>
+    <div class="nav-h">Fail</div>
+    <a href="#fail" data-v="fail">💾 Import / Eksport</a>
+    <a href="#bantuan" data-v="bantuan">❓ Bantuan</a>
+  </nav>
+  <main id="main"></main>
+</div>
+<div id="printArea" class="print-only"></div>
+<dialog id="modal"><form method="dialog" id="modalForm"></form></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
