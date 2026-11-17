@@ -24,7 +24,7 @@ export async function importRoz(bytes, name) {
   s.periods = d.periods.map(p => ({ name: p.name, short: p.short, start: p.start, end: p.end }));
   if (!s.periods.length) s.periods = emptyState().periods;
   const subjects = d.subjects.map((x, i) => ({ id: uid('s'), name: x.name, short: x.short || x.name, color: x.color || pickColor(i) }));
-  const teachers = d.teachers.map((x, i) => ({ id: uid('t'), name: x.name, short: x.short || x.name, color: x.color || pickColor(i) }));
+  const teachers = d.teachers.map((x, i) => ({ id: uid('t'), name: x.name, short: x.short || x.name, color: x.color || pickColor(i), ...(x.limits && Object.keys(x.limits).length ? { limits: x.limits } : {}) }));
   const rooms = d.rooms.map(x => ({ id: uid('r'), name: x.name, short: x.short || x.name }));
   const classes = d.classes.map((x, i) => ({ id: uid('c'), name: x.name, short: x.short || x.name, color: x.color || pickColor(i) }));
   s.subjects = subjects; s.teachers = teachers; s.rooms = rooms; s.classes = classes;

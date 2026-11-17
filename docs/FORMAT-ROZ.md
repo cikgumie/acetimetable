@@ -42,6 +42,11 @@ Kelas menyisipkan penanda `CString "CLASSTT"` sebelum nama dan berakhir dengan `
 3. **Gred** (bilangan didahului `int32`)
 4. **Subjek**
 5. **Guru** — rekod mengandungi semula nama pertama/nama akhir sebagai CString berasingan (digunakan untuk mengesan sempadan subjek/guru)
+   Syarat guru (susunan medan dari rutin Serialize asal, dianalisis dengan Ghidra), bermula 9 bait sebelum
+   pasangan `maksGapSeminggu, maksHari` yang terletak 17 bait selepas singkatan:
+   `int32 gapOverride, int32 maksHariOn, int32 maksGapSeminggu, int32 maksHari, int32 ?, byte adaMatriks,
+   [10 × 32 × int32 matriks], int32 maksBerturutan, int32 maksBerturutanOn, int32 ?, int32 maksGapSehari`.
+   Had berturutan/gap guru hanya berkuat kuasa jika tetapan global yang sepadan dihidupkan dalam program asal.
 6. **Kumpulan** — tiada singkatan: `CString nama, int32 seluruhKelas(0/1), int32 indeksPembahagian, …`
 7. **Kelas** — selepas singkatan: `1 bait, int32 bilPembahagian, int32 n, n × int32 indeks kumpulan`
 8. **Bilik**
@@ -86,5 +91,5 @@ Kedudukan, tempoh kad dan tanda × juga dibandingkan dengan tangkapan skrin prog
 
 ## Belum dinyahkod
 
-Jenis relasi lain, tetapan guru (maks. waktu berterusan dsb.), murid & pilihan subjek, reka bentuk cetakan,
+Jenis relasi lain, tetapan global penjana, had min/maks waktu sehari guru & kelas, murid & pilihan subjek, reka bentuk cetakan,
 dan format lama (< v600). Untuk fail versi lain, eksport XML dari aplikasi asal dan import XML.

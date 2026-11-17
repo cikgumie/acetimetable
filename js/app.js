@@ -212,6 +212,13 @@ function editEntity(name, id) {
       <textarea name="divs" rows="4" placeholder="Kumpulan 1, Kumpulan 2&#10;Lelaki, Perempuan">${esc(lines)}</textarea></label>
       <p class="muted" style="margin:0">Kumpulan dalam pembahagian yang sama boleh belajar serentak (cth. Kumpulan 1 &amp; 2); kumpulan dari pembahagian berbeza tidak.</p>`;
   }
+  // per-entity conditions used by the generator (blank = follow global setting / no limit)
+  const LIM = name === 'guru'
+    ? [['maxConsecutive', 'Maks. waktu berturutan'], ['maxGapsDay', 'Maks. gap sehari'], ['maxGapsWeek', 'Maks. gap seminggu'], ['maxDays', 'Maks. hari mengajar'], ['maxPerDay', 'Maks. waktu sehari'], ['minPerDay', 'Min. waktu sehari']]
+    : name === 'kelas' ? [['maxPerDay', 'Maks. waktu sehari'], ['minPerDay', 'Min. waktu sehari']] : [];
+  const lim = x.limits || {};
+  if (LIM.length) groupsHtml += `<div class="f">Syarat penjana (kosong = ikut tetapan umum / tiada had)<div class="row">${LIM.map(([k, label]) =>
+    `<label class="f">${label}<input type="number" min="0" max="99" name="lim_${k}" value="${lim[k] ?? ''}" style="width:90px"></label>`).join('')}</div></div>`;
   modal(id ? `Sunting ${E.one}` : `Tambah ${E.one}`, `
     <div class="row"><label class="f grow">Nama<input name="name" required value="${esc(x.name)}"></label>
     <label class="f">Singkatan<input name="short" value="${esc(x.short)}" size="10"></label>
@@ -220,6 +227,11 @@ function editEntity(name, id) {
       const n = f.name.value.trim(); if (!n) return false;
       const o = id ? x : { id: uid(E.prefix) };
       o.name = n; o.short = f.short.value.trim() || n.slice(0, 8); o.color = f.color.value;
+      if (LIM.length) {
+        const nl = {};
+        for (const [k] of LIM) { const v = f[`lim_${k}`].value.trim(); if (v !== '') nl[k] = Math.max(0, +v); }
+        if (Object.keys(nl).length) o.limits = nl; else delete o.limits;
+      }
       if (!id) S[E.key].push(o);
       if (name === 'kelas') {
         ensureEntireGroup(S, o.id);
@@ -531,8 +543,11 @@ VIEWS.jana = () => {
       <label><input type="checkbox" id="gClassGaps" ${ui.gClassGaps === false ? '' : 'checked'}> Elak waktu kosong (gap) kelas</label>
       <label><input type="checkbox" id="gTeacherGaps" ${ui.gTeacherGaps === false ? '' : 'checked'}> Kurangkan gap guru</label>
       <label class="f">Maks. waktu berturutan guru (0 = tiada had)<input type="number" id="gConsec" value="${ui.gConsec || 0}" min="0" max="15" style="width:80px"></label>
+      <label class="f">Maks. gap guru sehari (kosong = tiada had)<input type="number" id="gGapsDay" value="${ui.gGapsDay ?? ''}" min="0" max="15" style="width:80px"></label>
+      <label class="f">Maks. gap guru seminggu<input type="number" id="gGapsWeek" value="${ui.gGapsWeek ?? ''}" min="0" max="60" style="width:80px"></label>
       <label title="Jika buntu lama, abaikan relasi supaya lebih banyak kad dapat diletak"><input type="checkbox" id="gRelax" ${ui.gRelax ? 'checked' : ''}> Benarkan longgar relasi bila buntu</label>
     </div>
+    <p class="muted">Syarat khas setiap guru/kelas (cth. maks. waktu sehari) ditetapkan dalam borang suntingan guru/kelas dan mengatasi tetapan umum di atas.</p>
     <p class="muted">${st.lessons} pelajaran memerlukan ${st.need} kad. Jadual semasa akan diganti — eksport dahulu jika perlu.</p>
     <div class="row"><button class="btn primary" id="gRun">▶ Jana jadual</button><button class="btn" id="gStop" disabled>Henti</button></div>
     <div style="margin-top:14px"><div class="progress"><div id="gBar"></div></div><p id="gMsg" class="muted"></p></div>
@@ -542,7 +557,8 @@ BIND.jana = () => {
   $('#gRun').onclick = () => {
     if (!S.lessons.length) { toast('Tiada pelajaran untuk dijana'); return; }
     ui.gSec = +$('#gSec').value || 60; ui.gKeep = $('#gKeep').value; ui.gSpread = $('#gSpread').checked;
-    ui.gClassGaps = $('#gClassGaps').checked; ui.gTeacherGaps = $('#gTeacherGaps').checked; ui.gConsec = +$('#gConsec').value || 0; ui.gRelax = $('#gRelax').checked; saveUi();
+    ui.gClassGaps = $('#gClassGaps').checked; ui.gTeacherGaps = $('#gTeacherGaps').checked; ui.gConsec = +$('#gConsec').value || 0; ui.gRelax = $('#gRelax').checked;
+    const num = v => (v.trim() === '' ? null : Math.max(0, +v)); ui.gGapsDay = num($('#gGapsDay').value); ui.gGapsWeek = num($('#gGapsWeek').value); saveUi();
     worker?.terminate();
     worker = new Worker(new URL('./generator-worker.js', import.meta.url), { type: 'module' });
     $('#gRun').disabled = true; $('#gStop').disabled = false; $('#gMsg').textContent = 'Menjana…';
@@ -565,7 +581,7 @@ BIND.jana = () => {
       }
       if (m.type === 'error') { $('#gMsg').textContent = 'Ralat: ' + m.message; $('#gRun').disabled = false; $('#gStop').disabled = true; }
     };
-    worker.postMessage({ state: JSON.parse(JSON.stringify(S)), opts: { seconds: ui.gSec, keepExisting: ui.gKeep === 'all', spreadDays: ui.gSpread, classGaps: ui.gClassGaps !== false, teacherGaps: ui.gTeacherGaps !== false, maxConsecutive: ui.gConsec || 0, allowRelax: !!ui.gRelax } });
+    worker.postMessage({ state: JSON.parse(JSON.stringify(S)), opts: { seconds: ui.gSec, keepExisting: ui.gKeep === 'all', spreadDays: ui.gSpread, classGaps: ui.gClassGaps !== false, teacherGaps: ui.gTeacherGaps !== false, maxConsecutive: ui.gConsec || 0, maxGapsDay: ui.gGapsDay ?? null, maxGapsWeek: ui.gGapsWeek ?? null, allowRelax: !!ui.gRelax } });
   };
   $('#gStop').onclick = () => { worker?.terminate(); worker = null; $('#gMsg').textContent = 'Dihentikan — jadual tidak diubah.'; $('#gRun').disabled = false; $('#gStop').disabled = true; };
 };

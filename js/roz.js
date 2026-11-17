@@ -275,6 +275,30 @@ export async function readAscFile(fileBytes, fileName = '') {
   const nums = periods.map(p => p.num);
   const toff = h => (nums.length ? readTimeoff(r, h.after, h.pos + h.size, nums, dayCount) : null) || [];
 
+  // Teacher constraint overrides (field order from the original Serialize routine):
+  //   gapsOverride, maxDaysOn, maxGapsWeek, maxDays, ?, matrixFlag(byte) [10 x 32 int32 matrix],
+  //   maxConsecutive, maxConsecutiveOn, ?, maxGapsDay
+  // Anchored on the maxGapsWeek/maxDays pair which sits 17 bytes after the short name.
+  const teacherLimits = h => {
+    try {
+      const q = h.after + 17;
+      if (q + 40 > r.b.length) return {};
+      const gapsOn = r.i32(q - 8), daysOn = r.i32(q - 4), gapsWeek = r.i32(q), maxDays = r.i32(q + 4);
+      const flag = r.b[q + 12];
+      if (flag > 1) return {};
+      const after = q + 13 + (flag ? 10 * 128 : 0);
+      const consec = r.i32(after), consecOn = r.i32(after + 4), gapsDay = r.i32(after + 12);
+      const ok = v => v >= 0 && v < 100;
+      if (![gapsWeek, maxDays, consec, gapsDay].every(ok)) return {};
+      const out = {};
+      if (consecOn) out.maxConsecutive = consec;
+      if (gapsOn) out.maxGapsWeek = gapsWeek;
+      if (daysOn) out.maxDays = maxDays;
+      if (gapsDay > 0) out.maxGapsDay = gapsDay;
+      return out;
+    } catch { return {}; }
+  };
+
   // relations: object header, int32 5, CString description, int32 n + n class indices,
   // int32 n + n subject indices, int32 type (12 = start at the same time, 14 = same period each day)
   const relations = [];
@@ -302,7 +326,7 @@ export async function readAscFile(fileBytes, fileName = '') {
     periods,
     grades: gradeH.map(h => ({ name: h.name, short: h.short })),
     subjects: subjectH.map(h => ({ name: h.name, short: h.short, color: h.color, timeoff: toff(h) })),
-    teachers: teacherH.map(h => ({ name: h.name, short: h.short, color: h.color, timeoff: toff(h) })),
+    teachers: teacherH.map(h => ({ name: h.name, short: h.short, color: h.color, timeoff: toff(h), limits: teacherLimits(h) })),
     classes: classH.map((h, i) => ({ name: h.name, short: h.short, color: h.color, groups: classInfo[i].groups, timeoff: toff(h) })),
     groups,
     rooms: roomH.map(h => ({ name: h.name, short: h.short, color: h.color, timeoff: toff(h) })),

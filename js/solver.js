@@ -151,7 +151,14 @@ export function solve(state, opts = {}, onProgress = () => {}) {
   const tAvail = t => { const a = []; for (let d = 0; d < D; d++) { let m = 0; for (let p = 0; p < P; p++) if (!blocked.has(`t:${t}@${d}-${p}`)) m |= 1 << p; a.push(m); } return a; };
   const maskOf = (arr, d) => { let m = 0; for (let p = 0; p < P; p++) if (arr[d * P + p] > 0) m |= 1 << p; return m; };
   const gaps = (m, a) => { if (!m) return 0; const lo = 31 - Math.clz32(m & -m), hi = 31 - Math.clz32(m); let g = 0; for (let p = lo + 1; p < hi; p++) if ((a >> p & 1) && !(m >> p & 1)) g++; return g; };
-  const overflow = m => { if (!maxConsec) return 0; let run = 0, o = 0; for (let p = 0; p <= P; p++) { if (p < P && (m >> p & 1)) run++; else { if (run > maxConsec) o += run - maxConsec; run = 0; } } return o; };
+  const overflow = (m, lim) => { if (!lim) return 0; let run = 0, o = 0; for (let p = 0; p <= P; p++) { if (p < P && (m >> p & 1)) run++; else { if (run > lim) o += run - lim; run = 0; } } return o; };
+  const pop = m => { let c = 0; while (m) { m &= m - 1; c++; } return c; };
+  const over = (v, lim) => (lim == null ? 0 : Math.max(0, v - lim));
+  // per-entity limits (teacher/class "constraints"), falling back to the global settings
+  const tLim = Object.fromEntries((state.teachers || []).map(t => [t.id, t.limits || {}]));
+  const cLim = Object.fromEntries((state.classes || []).map(c => [c.id, c.limits || {}]));
+  const gLim = { maxConsecutive: maxConsec || null, maxGapsDay: opts.maxGapsDay ?? null, maxGapsWeek: opts.maxGapsWeek ?? null };
+  const HARD = 15;
   const span = (p, n) => ((1 << n) - 1) << p;
 
   function trackPut(u, sign) {
@@ -183,14 +190,31 @@ export function solve(state, opts = {}, onProgress = () => {}) {
         if (partnerToday && !adjacent) pen += 4; else if (adjacent) pen -= 2;
       }
     }
-    if (W.classGap) for (const [c, add] of Object.entries(cAdd)) {
-      const cur = maskOf(cntOf(clsCnt, c), day), a = avail[c]?.[day] ?? -1;
-      pen += W.classGap * (gaps(cur | add, a) - gaps(cur, a));
+    for (const [c, add] of Object.entries(cAdd)) {
+      const arr = cntOf(clsCnt, c), cur = maskOf(arr, day), a = avail[c]?.[day] ?? -1;
+      if (W.classGap) pen += W.classGap * (gaps(cur | add, a) - gaps(cur, a));
+      const L = cLim[c];
+      if (L && L.maxPerDay != null) pen += HARD * (over(pop(cur | add), L.maxPerDay) - over(pop(cur), L.maxPerDay));
     }
     for (const [t, add] of Object.entries(tAdd)) {
-      const cur = maskOf(cntOf(tchCnt, t), day);
-      if (W.teacherGap) { const a = (tAvailC[t] ||= tAvail(t))[day]; pen += W.teacherGap * (gaps(cur | add, a) - gaps(cur, a)); }
-      if (maxConsec) pen += W.consec * (overflow(cur | add) - overflow(cur));
+      const arr = cntOf(tchCnt, t), cur = maskOf(arr, day), a = (tAvailC[t] ||= tAvail(t))[day];
+      const L = tLim[t] || {};
+      const g0 = gaps(cur, a), g1 = gaps(cur | add, a);
+      if (W.teacherGap) pen += W.teacherGap * (g1 - g0);
+      const gd = L.maxGapsDay ?? gLim.maxGapsDay;
+      if (gd != null) pen += HARD * (over(g1, gd) - over(g0, gd));
+      const gw = L.maxGapsWeek ?? gLim.maxGapsWeek;
+      if (gw != null) {
+        let wk = 0; for (let d = 0; d < D; d++) wk += gaps(maskOf(arr, d), tAvailC[t][d]);
+        pen += HARD * (over(wk - g0 + g1, gw) - over(wk, gw));
+      }
+      const mc = L.maxConsecutive ?? gLim.maxConsecutive;
+      if (mc) pen += W.consec * (overflow(cur | add, mc) - overflow(cur, mc));
+      if (L.maxPerDay != null) pen += HARD * (over(pop(cur | add), L.maxPerDay) - over(pop(cur), L.maxPerDay));
+      if (L.maxDays != null && !cur) {
+        let used = 0; for (let d = 0; d < D; d++) if (maskOf(arr, d)) used++;
+        if (used + 1 > L.maxDays) pen += HARD;
+      }
     }
     return pen;
   }
