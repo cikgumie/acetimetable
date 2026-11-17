@@ -522,9 +522,16 @@ VIEWS.jana = () => {
   return `<h1>Jana automatik</h1><p class="sub">Penjana meletakkan semua kad pelajaran tanpa pertembungan guru, kelas/kumpulan dan bilik, mengikut masa tidak tersedia, kad berkunci dan <a href="#relasi">relasi</a>. Untuk jadual sekolah yang padat, beri 60 saat atau lebih.</p>
   <div class="panel">
     <div class="row">
-      <label class="f">Had masa (saat)<input type="number" id="gSec" value="${ui.gSec || 20}" min="2" max="600" style="width:100px"></label>
+      <label class="f">Had masa (saat)<input type="number" id="gSec" value="${ui.gSec || 60}" min="5" max="1800" style="width:100px"></label>
       <label class="f">Kad sedia ada<select id="gKeep"><option value="locked">Kekalkan kad berkunci sahaja (${locked})</option><option value="all" ${ui.gKeep === 'all' ? 'selected' : ''}>Kekalkan semua kad sedia ada (${S.cards.length})</option></select></label>
-      <label style="margin-top:16px"><input type="checkbox" id="gSpread" ${ui.gSpread === false ? '' : 'checked'}> Elakkan subjek sama dua kali sehari</label>
+    </div>
+    <h2>Syarat</h2>
+    <div class="row">
+      <label><input type="checkbox" id="gSpread" ${ui.gSpread === false ? '' : 'checked'}> Kad pelajaran sama pada hari berbeza</label>
+      <label><input type="checkbox" id="gClassGaps" ${ui.gClassGaps === false ? '' : 'checked'}> Elak waktu kosong (gap) kelas</label>
+      <label><input type="checkbox" id="gTeacherGaps" ${ui.gTeacherGaps === false ? '' : 'checked'}> Kurangkan gap guru</label>
+      <label class="f">Maks. waktu berturutan guru (0 = tiada had)<input type="number" id="gConsec" value="${ui.gConsec || 0}" min="0" max="15" style="width:80px"></label>
+      <label title="Jika buntu lama, abaikan relasi supaya lebih banyak kad dapat diletak"><input type="checkbox" id="gRelax" ${ui.gRelax ? 'checked' : ''}> Benarkan longgar relasi bila buntu</label>
     </div>
     <p class="muted">${st.lessons} pelajaran memerlukan ${st.need} kad. Jadual semasa akan diganti — eksport dahulu jika perlu.</p>
     <div class="row"><button class="btn primary" id="gRun">▶ Jana jadual</button><button class="btn" id="gStop" disabled>Henti</button></div>
@@ -534,25 +541,31 @@ VIEWS.jana = () => {
 BIND.jana = () => {
   $('#gRun').onclick = () => {
     if (!S.lessons.length) { toast('Tiada pelajaran untuk dijana'); return; }
-    ui.gSec = +$('#gSec').value || 20; ui.gKeep = $('#gKeep').value; ui.gSpread = $('#gSpread').checked; saveUi();
+    ui.gSec = +$('#gSec').value || 60; ui.gKeep = $('#gKeep').value; ui.gSpread = $('#gSpread').checked;
+    ui.gClassGaps = $('#gClassGaps').checked; ui.gTeacherGaps = $('#gTeacherGaps').checked; ui.gConsec = +$('#gConsec').value || 0; ui.gRelax = $('#gRelax').checked; saveUi();
     worker?.terminate();
     worker = new Worker(new URL('./generator-worker.js', import.meta.url), { type: 'module' });
     $('#gRun').disabled = true; $('#gStop').disabled = false; $('#gMsg').textContent = 'Menjana…';
     const t0 = Date.now();
     worker.onmessage = e => {
       const m = e.data;
-      if (m.type === 'progress') { $('#gBar').style.width = `${Math.min(100, (Date.now() - t0) / (ui.gSec * 10))}%`; $('#gMsg').textContent = `Lelaran ${m.iter} · belum diletak ${m.unplaced} (terbaik ${m.best}) daripada ${m.total}`; }
+      if (m.type === 'progress') {
+        $('#gBar').style.width = `${Math.min(100, (Date.now() - t0) / (ui.gSec * 10))}%`;
+        $('#gMsg').textContent = m.phase === 'optimum'
+          ? `Fasa 2 — optimumkan markah: ${m.moves} pengubahan · belum diletak ${m.unplaced}`
+          : `Fasa 1 — jana: lelaran ${m.iter} · belum diletak ${m.unplaced} (terbaik ${m.best}) daripada ${m.total}${m.scatters ? ` · selerak ${m.scatters}×` : ''}${m.relaxed ? ' · relasi dilonggarkan' : ''}`;
+      }
       if (m.type === 'done') {
         const r = m.result; worker.terminate(); worker = null;
         S.cards = r.cards.map(c => ({ id: c.id || uid('k'), lessonId: c.lessonId, day: c.day, period: c.period, roomId: c.roomId || null, locked: !!c.locked }));
         commit(false);
         $('#gBar').style.width = '100%';
-        $('#gMsg').innerHTML = `Selesai dalam ${(r.elapsed / 1000).toFixed(1)} s: <b>${r.total - r.unplaced}/${r.total}</b> kad baharu diletak${r.unplaced ? `, <b style="color:var(--danger)">${r.unplaced} tidak dapat diletak</b> (semak masa tidak tersedia / beban guru)` : ' ✔'}. <a href="#semua">Lihat semua kelas →</a>`;
+        $('#gMsg').innerHTML = `Selesai dalam ${(r.elapsed / 1000).toFixed(1)} s: <b>${r.total - r.unplaced}/${r.total}</b> kad baharu diletak${r.unplaced ? `, <b style="color:var(--danger)">${r.unplaced} tidak dapat diletak</b> — cuba lagi dengan masa lebih lama, atau letak manual dari "Belum diletak"` : ' ✔'}; ${r.moves} pengubahan untuk kurangkan gap${r.relaxed ? '; <b>relasi dilonggarkan</b>' : ''}. <a href="#semua">Lihat semua kelas →</a>`;
         $('#gRun').disabled = false; $('#gStop').disabled = true;
       }
       if (m.type === 'error') { $('#gMsg').textContent = 'Ralat: ' + m.message; $('#gRun').disabled = false; $('#gStop').disabled = true; }
     };
-    worker.postMessage({ state: JSON.parse(JSON.stringify(S)), opts: { seconds: ui.gSec, keepExisting: ui.gKeep === 'all', spreadDays: ui.gSpread } });
+    worker.postMessage({ state: JSON.parse(JSON.stringify(S)), opts: { seconds: ui.gSec, keepExisting: ui.gKeep === 'all', spreadDays: ui.gSpread, classGaps: ui.gClassGaps !== false, teacherGaps: ui.gTeacherGaps !== false, maxConsecutive: ui.gConsec || 0, allowRelax: !!ui.gRelax } });
   };
   $('#gStop').onclick = () => { worker?.terminate(); worker = null; $('#gMsg').textContent = 'Dihentikan — jadual tidak diubah.'; $('#gRun').disabled = false; $('#gStop').disabled = true; };
 };

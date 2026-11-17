@@ -10,7 +10,12 @@ Tiada pelayan, tiada pangkalan data: semua data disimpan dalam pelayar pengguna 
 - **Masa tidak tersedia** untuk guru, kelas, bilik dan subjek.
 - **Relasi**: mula serentak (kumpulan elektif), waktu sama setiap hari, tidak boleh hari sama, berturutan.
 - **Kad berkunci** tidak dialihkan oleh penjana.
-- **Penjana automatik** (Web Worker): letak semua kad tanpa pertembungan guru, kelas/kumpulan dan bilik; hormati kad berkunci.
+- **Penjana automatik** (Web Worker), mengikut fasa enjin aSc tetapi kod sendiri:
+  1. bina jadual dengan *ejection* kad bertembung (vykop) + tabu,
+  2. kesan buntu → selerakkan sebahagian jadual (rozhadzovanie), pilihan longgarkan relasi (zlava),
+  3. optimumkan markah (optimalizuj body): alih/tukar kad untuk kurangkan gap kelas & guru.
+  Syarat: tiada pertembungan, masa tidak tersedia, kad berkunci, relasi, kad pelajaran sama pada hari berbeza,
+  gap kelas/guru, had waktu berturutan guru.
 - **Susun manual**: seret & lepas kad, sorotan sel sah/tidak sah, amaran pertembungan, kunci kad.
 - **Paparan**: jadual setiap kelas/guru/bilik, dan gambaran "semua kelas/guru/bilik".
 - **Guru ganti (relief)**: pilih tarikh & guru tidak hadir, cadangan guru lapang ikut beban, agih automatik, cetak slip.
