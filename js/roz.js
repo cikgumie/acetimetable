@@ -141,24 +141,35 @@ function tryCard(r, p, lessonCount, periodCount, end) {
   return { card: { lesson, rooms, period, dur: x, days, weeks }, next: q + 63 };
 }
 
-// Some card records carry extra embedded data, so cards are located by their fixed tail
-// (00 FFFFFFFF + 28 zero bytes + int32 1) and decoded backwards from it.
-function findCards(r, start, end, lessonCount, periodCount) {
+// Card records are located by their fixed body
+//   period, dur, 0, daysMask, weeksMask, 00 FFFFFFFF, K, ...
+// and decoded backwards: ... lesson, [room], nList, list..., body.
+// When the previous card's K == 1 the next card carries an assigned classroom index
+// between the lesson index and the list (seen on lab lessons such as SC/KIM/BIO/FZ).
+function findCards(r, start, end, lessonCount, periodCount, roomCount) {
   const b = r.b, cards = [];
-  let last = 0;
-  for (let t = start + 28; t < end - 40; t++) {
-    if (b[t] !== 0 || r.i32(t + 1) !== -1 || r.i32(t + 33) !== 1) continue;
-    let zeros = true;
-    for (let k = t + 5; k < t + 33; k++) if (b[k] !== 0) { zeros = false; break; }
-    if (!zeros) continue;
-    const q = t - 20;
-    for (let n = 0; n <= 8; n++) {
-      const p = q - 8 - 4 * n;
-      if (p < start || r.i32(p + 4) !== n) continue;
-      const res = tryCard(r, p, lessonCount, periodCount, end + 80);
-      if (res && res.card.lesson >= last) { cards.push(res.card); last = res.card.lesson; break; }
+  let last = 0, prevK = 0;
+  for (let q = start + 12; q < end - 40; q++) {
+    if (r.i32(q + 8) !== 0 || b[q + 20] !== 0 || r.i32(q + 21) !== -1) continue;
+    const days = r.i32(q + 12), weeks = r.i32(q + 16), period = r.i32(q), dur = r.i32(q + 4);
+    if (days <= 0 || days > 0x7f || weeks <= 0 || weeks > 0xffff) continue;
+    if (period < 0 || period >= Math.max(periodCount, 1) || dur < 0 || dur > 20) continue;
+    let found = null;
+    for (let n = 0; n <= 8 && !found; n++) {
+      const p = q - 4 * n; // list start
+      if (p - 8 < start || r.i32(p - 4) !== n) continue;
+      const list = []; for (let k = 0; k < n; k++) list.push(r.i32(p + 4 * k));
+      const a = r.i32(p - 8), bb = r.i32(p - 12);
+      // with assigned room: lesson, room, n, list ; without: lesson, n, list
+      const withRoom = prevK === 1 && bb >= last && bb < lessonCount && a >= 0 && a < Math.max(roomCount, 1);
+      if (withRoom) found = { lesson: bb, room: a, list };
+      else if (a >= last && a < lessonCount) found = { lesson: a, room: list.find(x => x >= 0 && x < roomCount) ?? -1, list };
     }
-    t += 32;
+    if (!found) continue;
+    cards.push({ lesson: found.lesson, rooms: found.room >= 0 ? [found.room] : [], period, dur, days, weeks });
+    last = found.lesson;
+    prevK = r.i32(q + 25);
+    q += 24;
   }
   return cards;
 }
@@ -222,7 +233,7 @@ export async function readAscFile(fileBytes, fileName = '') {
   if (!lessons.length) warnings.push('Tiada rekod pelajaran ditemui.');
   const cardStart = lastLessonH ? lastLessonH.after + 40 : 0;
   const nextH = H.find(h => h.pos > cardStart);
-  const rawCards = findCards(r, cardStart, nextH ? nextH.pos : r.b.length, lessons.length, periods.length);
+  const rawCards = findCards(r, cardStart, nextH ? nextH.pos : r.b.length, lessons.length, periods.length, roomH.length);
 
   // map groups -> classes
   const groupClass = new Array(groupCount).fill(-1);

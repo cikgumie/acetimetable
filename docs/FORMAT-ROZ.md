@@ -56,15 +56,16 @@ Kelas menyisipkan penanda `CString "CLASSTT"` sebelum nama dan berakhir dengan `
    int32 waktu (0-based), int32 tempoh, int32 0, int32 topengHari (bit0 = hari 1), int32 topengMinggu,
    00 FFFFFFFF, 28 × 00, int32 1, …
    ```
-   Sesetengah kad membawa data tambahan berpanjangan berubah, jadi pembaca mencari "ekor" tetap rekod dan
-   menyahkod ke belakang.
+   Jika `int32` selepas `00 FFFFFFFF` kad sebelumnya bernilai 1, kad berikutnya menyimpan **indeks bilik
+   yang ditetapkan** (cth. makmal untuk SC/KIM/BIO/FZ) di antara indeks pelajaran dan senarai:
+   `lesson, room, n, senarai…`. Pembaca mengesan badan tetap kad (`waktu … 00 FFFFFFFF`) dan menyahkod ke belakang.
 
 ## Pengesahan
 
 | Fail | Kad dibaca | Pertembungan guru/kelas |
 |---|---|---|
 | v702 `.rox` (modul ganti) | 667 | 0 |
-| v802 `.ziptt` (sandaran) | 608 | 0 |
+| v802 `.roz` / `.ziptt` | 677 daripada 678 (semua kelas penuh) | 0 |
 
 Sifar pertembungan dalam jadual siap ialah bukti kukuh bahawa indeks pelajaran, kumpulan, guru, hari dan waktu dinyahkod dengan betul.
 
