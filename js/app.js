@@ -363,12 +363,34 @@ function cardHtml(c, l, ix, mode, clashes, { draggable = true, id = c?.id } = {}
   const sub = ix.subject[l.subjectId] || {};
   const lb = lessonLabel(S, l, ix);
   const line2 = mode === 't' ? lb.cls : mode === 'r' ? `${lb.cls} · ${lb.t}` : lb.t;
-  const grp = mode === 'c' ? l.groupIds.map(g => ix.group[g]).filter(g => g && g.division > 0).map(g => g.name).join(', ') : '';
+  const grp = mode === 'c' ? [...new Set(l.groupIds.map(g => ix.group[g]).filter(g => g && g.division > 0).map(g => g.name))].join(', ') : '';
   const room = c?.roomId ? ix.room[c.roomId]?.short : '';
   const cls = ['card', c && clashes?.has(c.id) ? 'clash' : '', c?.locked ? 'locked' : ''].join(' ');
   const title = `${sub.name || ''}\n${lb.cls}\n${l.teacherIds.map(t => ix.teacher[t]?.name).join(', ')}${room ? '\nBilik: ' + room : ''}${c && clashes?.has(c.id) ? '\n⚠ ' + clashes.get(c.id).join('; ') : ''}`;
   return `<div class="${cls}" ${draggable ? 'draggable="true"' : ''} data-card="${id || ''}" data-lesson="${l.id}" title="${esc(title)}" style="background:${esc(sub.color || '#ddd')};color:${ink(sub.color)}">
     <b>${esc(sub.short || '?')}${grp ? ` <small>(${esc(grp)})</small>` : ''}</b><i>${esc(line2 || '')}</i>${room ? `<i>${esc(room)}</i>` : ''}</div>`;
+}
+// Split a day row into blocks: cards that start together and share the same length are drawn as one
+// block spanning their periods (like the original program); otherwise one cell per period.
+function rowSegments(itemsAt, P) {
+  const segs = [];
+  const key = items => items.map(x => x.c.id).sort().join(',');
+  for (let p = 0; p < P;) {
+    const items = itemsAt(p) || [];
+    let span = 1;
+    if (items.length && items.every(x => x.c.period === p)) {
+      const n = Math.min(...items.map(x => Math.max(1, x.l.periodsPerCard)));
+      if (items.every(x => Math.max(1, x.l.periodsPerCard) === n) && p + n <= P) {
+        const k0 = key(items);
+        let ok = true;
+        for (let k = 1; k < n; k++) if (key(itemsAt(p + k) || []) !== k0) { ok = false; break; }
+        if (ok) span = n;
+      }
+    }
+    segs.push({ p, span, items });
+    p += span;
+  }
+  return segs;
 }
 function gridHtml(mode, id, ix, clashes, { interactive = true } = {}) {
   const list = cardsFor(mode, id, ix);
@@ -376,9 +398,9 @@ function gridHtml(mode, id, ix, clashes, { interactive = true } = {}) {
   for (const c of list) { const l = ix.lesson[c.lessonId]; cardSlots(c, l).forEach((p, k) => { (at[`${c.day}-${p}`] ||= []).push({ c, l, first: k === 0 }); }); }
   const off = new Set(S.timeoff[`${mode}:${id}`] || []);
   return `<table class="tt"><thead><tr><th></th>${S.periods.map(p => `<th>${esc(p.short)}<small>${esc(p.start)}${p.end ? '–' + esc(p.end) : ''}</small></th>`).join('')}</tr></thead><tbody>
-  ${S.days.map((d, di) => `<tr><th>${esc(d.name)}</th>${S.periods.map((p, pi) => {
-    const items = at[`${di}-${pi}`] || [];
-    return `<td data-cell="${di}-${pi}" class="${off.has(`${di}-${pi}`) ? 'off' : ''}">${items.map(({ c, l, first }) => cardHtml(c, l, ix, mode, clashes, { draggable: interactive && first && !c.locked })).join('')}</td>`;
+  ${S.days.map((d, di) => `<tr><th>${esc(d.name)}</th>${rowSegments(p => at[`${di}-${p}`], S.periods.length).map(({ p: pi, span, items }) => {
+    const isOff = !items.length && off.has(`${di}-${pi}`);
+    return `<td data-cell="${di}-${pi}" ${span > 1 ? `colspan="${span}"` : ''} class="${isOff ? 'off' : ''}${items.length > 1 ? ' parts' : ''}">${isOff ? '<span class="x">×</span>' : ''}${items.map(({ c, l, first }) => cardHtml(c, l, ix, mode, clashes, { draggable: interactive && first && !c.locked })).join('')}</td>`;
   }).join('')}</tr>`).join('')}
   </tbody></table>`;
 }
@@ -513,12 +535,19 @@ VIEWS.semua = () => {
   <div class="grid-wrap panel" style="padding:0"><table class="master"><thead>
     <tr><th></th>${S.days.map(d => `<th colspan="${S.periods.length}" class="dsep">${esc(d.name)}</th>`).join('')}</tr>
     <tr><th></th>${S.days.map(() => S.periods.map((p, i) => `<th class="${i === 0 ? 'dsep' : ''}">${esc(p.short)}</th>`).join('')).join('')}</tr></thead><tbody>
-    ${ents.map(e => `<tr data-open="${e.id}" style="cursor:pointer"><th>${esc(e.short)}</th>${S.days.map((d, di) => S.periods.map((p, pi) => {
-      const it = cellMap[`${e.id}|${di}-${pi}`] || [];
-      if (!it.length && (S.timeoff[`${mode}:${e.id}`] || []).includes(`${di}-${pi}`)) return `<td class="${pi === 0 ? 'dsep' : ''} muted" title="Tidak tersedia">×</td>`;
-      const bad = it.some(x => clashes.has(x.c.id));
-      const txt = it.map(x => mode === 't' ? lessonLabel(S, x.l, ix).cls : ix.subject[x.l.subjectId]?.short).join('/');
-      return `<td class="${pi === 0 ? 'dsep' : ''}" style="${it[0] ? `background:${esc(ix.subject[it[0].l.subjectId]?.color)};color:${ink(ix.subject[it[0].l.subjectId]?.color)}` : ''};${bad ? 'outline:2px solid var(--danger);outline-offset:-2px' : ''}" title="${esc(txt)}">${esc(txt)}</td>`;
+    ${ents.map(e => `<tr data-open="${e.id}" style="cursor:pointer"><th>${esc(e.short)}</th>${S.days.map((d, di) => rowSegments(p => cellMap[`${e.id}|${di}-${p}`], S.periods.length).map(({ p: pi, span, items: it }) => {
+      const cls = pi === 0 ? 'dsep' : '';
+      if (!it.length && (S.timeoff[`${mode}:${e.id}`] || []).includes(`${di}-${pi}`)) return `<td class="${cls} muted" title="Tidak tersedia">×</td>`;
+      const label = x => (mode === 't' ? lessonLabel(S, x.l, ix).cls : ix.subject[x.l.subjectId]?.short);
+      const title = it.map(x => `${ix.subject[x.l.subjectId]?.name} — ${lessonLabel(S, x.l, ix).cls} — ${lessonLabel(S, x.l, ix).t}`).join('\n');
+      const bad = it.some(x => clashes.has(x.c.id)) ? 'outline:2px solid var(--danger);outline-offset:-2px;' : '';
+      const sp = span > 1 ? ` colspan="${span}"` : '';
+      if (it.length <= 1) {
+        const col = it[0] ? ix.subject[it[0].l.subjectId]?.color : '';
+        return `<td class="${cls}"${sp} style="${col ? `background:${esc(col)};color:${ink(col)};` : ''}${bad}" title="${esc(title)}">${it[0] ? esc(label(it[0])) : ''}</td>`;
+      }
+      // several groups at the same time: stacked parts, each in its own subject colour
+      return `<td class="${cls} parts"${sp} style="${bad}" title="${esc(title)}">${it.map(x => { const col = ix.subject[x.l.subjectId]?.color; return `<div class="part" style="background:${esc(col)};color:${ink(col)}">${esc(label(x))}</div>`; }).join('')}</td>`;
     }).join('')).join('')}</tr>`).join('')}
   </tbody></table></div>`;
 };
