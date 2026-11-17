@@ -1,6 +1,7 @@
 // Import / export: native .roz/.rox/.ziptt, aSc-compatible XML, and our own JSON.
 import { readAscFile } from './roz.js';
 import { emptyState, uid, DEFAULT_DAYS, pickColor, normalize, indexState, ensureEntireGroup } from './model.js';
+import { relationFromAsc } from './relations.js';
 
 const ROMAN_DAYS = DEFAULT_DAYS;
 
@@ -55,11 +56,17 @@ export async function importRoz(bytes, name) {
     const lid = lessonIds[c.lesson]; if (!lid) continue;
     for (let day = 0; day < 16; day++) if (c.days & (1 << day)) {
       if (day >= s.days.length) continue;
-      s.cards.push({ id: uid('k'), lessonId: lid, day, period: c.period, roomId: rooms[c.rooms[0]]?.id || null, locked: false });
+      s.cards.push({ id: uid('k'), lessonId: lid, day, period: c.period, roomId: rooms[c.rooms[0]]?.id || null, locked: !!c.locked });
     }
   }
+  s.relations = (d.relations || []).map(r => ({
+    id: uid('x'), ...relationFromAsc(r.type), ascType: r.type, desc: r.desc,
+    subjectIds: r.subjects.map(i => subjects[i]?.id).filter(Boolean),
+    classIds: r.classes.map(i => classes[i]?.id).filter(Boolean),
+  }));
   const m = d.meta.counts;
-  const report = `Fail aSc v${d.meta.version} dibaca: ${m.periods} waktu, ${m.subjects} subjek, ${m.teachers} guru, ${m.classes} kelas, ${m.rooms} bilik, ${m.lessons} pelajaran, ${s.cards.length} kad.` +
+  const locked = s.cards.filter(c => c.locked).length;
+  const report = `Fail aSc v${d.meta.version} dibaca: ${m.periods} waktu, ${m.subjects} subjek, ${m.teachers} guru, ${m.classes} kelas, ${m.rooms} bilik, ${m.lessons} pelajaran, ${s.cards.length} kad (${locked} berkunci), ${s.relations.length} relasi.` +
     (skipped ? ` ${skipped} pelajaran tanpa kelas/subjek dilangkau.` : '') + (d.meta.warnings.length ? ' Amaran: ' + d.meta.warnings.join(' ') : '');
   return { state: s, report };
 }

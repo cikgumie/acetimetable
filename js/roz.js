@@ -167,7 +167,8 @@ function findCards(r, start, end, lessonCount, periodCount, roomCount) {
       else if (a >= last && a < lessonCount) found = { lesson: a, room: list.find(x => x >= 0 && x < roomCount) ?? -1, list };
     }
     if (!found) continue;
-    cards.push({ lesson: found.lesson, rooms: found.room >= 0 ? [found.room] : [], period, dur, days, weeks });
+    // byte 59 after the body start = card locked ("pinned") in the original program
+    cards.push({ lesson: found.lesson, rooms: found.room >= 0 ? [found.room] : [], period, dur, days, weeks, locked: b[q + 59] === 1 });
     last = found.lesson;
     prevK = r.i32(q + 25);
     q += 24;
@@ -274,6 +275,25 @@ export async function readAscFile(fileBytes, fileName = '') {
   const nums = periods.map(p => p.num);
   const toff = h => (nums.length ? readTimeoff(r, h.after, h.pos + h.size, nums, dayCount) : null) || [];
 
+  // relations: object header, int32 5, CString description, int32 n + n class indices,
+  // int32 n + n subject indices, int32 type (12 = start at the same time, 14 = same period each day)
+  const relations = [];
+  for (const h of H) {
+    if (h.pos < cardStart || r.i32(h.nameAt) !== 5) continue;
+    try {
+      let [desc, p] = r.cstr(h.nameAt + 4);
+      if (desc.length < 3) continue;
+      let classes, subjects;
+      [classes, p] = readList(r, p);
+      [subjects, p] = readList(r, p);
+      const type = r.i32(p);
+      if (!classes.length || !subjects.length) continue;
+      if (classes.some(x => x < 0 || x >= classH.length) || subjects.some(x => x < 0 || x >= subjectH.length)) continue;
+      if (type < 0 || type > 200) continue;
+      relations.push({ type, desc, classes, subjects });
+    } catch { /* not a relation */ }
+  }
+
   return {
     meta: { version, magic, fileName, warnings, counts: {
       periods: periods.length, grades: gradeH.length, subjects: subjectH.length, teachers: teacherH.length,
@@ -288,5 +308,6 @@ export async function readAscFile(fileBytes, fileName = '') {
     rooms: roomH.map(h => ({ name: h.name, short: h.short, color: h.color, timeoff: toff(h) })),
     lessons,
     cards: rawCards,
+    relations,
   };
 }

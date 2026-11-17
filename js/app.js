@@ -3,6 +3,7 @@ import {
   lessonClassIds, lessonLabel, placedCount, stats, teacherLoad, ensureEntireGroup, groupsClash,
 } from './model.js';
 import { importFile, exportAscXml, exportCsv, download } from './io.js';
+import { RELATION_TYPES, relationLessonIds, serentakPartners } from './relations.js';
 
 let S = loadLocal() || emptyState();
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -185,6 +186,9 @@ function deleteEntity(name, id) {
   const E = ENT[name];
   S[E.key] = S[E.key].filter(x => x.id !== id);
   delete S.timeoff[E.tk + ':' + id];
+  if (name === 'subjek' || name === 'kelas') {
+    S.relations = (S.relations || []).map(r => ({ ...r, subjectIds: r.subjectIds.filter(x => x !== id), classIds: r.classIds.filter(x => x !== id) })).filter(r => r.subjectIds.length);
+  }
   if (name === 'subjek') { const gone = new Set(S.lessons.filter(l => l.subjectId === id).map(l => l.id)); S.lessons = S.lessons.filter(l => !gone.has(l.id)); S.cards = S.cards.filter(c => !gone.has(c.lessonId)); }
   if (name === 'guru') S.lessons.forEach(l => { l.teacherIds = l.teacherIds.filter(t => t !== id); });
   if (name === 'bilik') { S.lessons.forEach(l => { l.roomIds = l.roomIds.filter(r => r !== id); }); S.cards.forEach(c => { if (c.roomId === id) c.roomId = null; }); }
@@ -433,7 +437,13 @@ function bindDrag() {
       const l = ix.lesson[drag.lessonId];
       if (p + l.periodsPerCard > S.periods.length) { toast('Kad terlalu panjang untuk waktu ini'); return; }
       const conf = placementClashes(l, d, p, drag.cardId, ix);
-      if (drag.cardId) { const c = S.cards.find(x => x.id === drag.cardId); c.day = d; c.period = p; }
+      if (drag.cardId) {
+        const c = S.cards.find(x => x.id === drag.cardId);
+        const partners = serentakPartners(S, c).filter(x => !x.locked);
+        c.day = d; c.period = p;
+        partners.forEach(x => { x.day = d; x.period = p; });
+        if (partners.length) toast(`${partners.length} kad relasi serentak turut dialihkan`);
+      }
       else S.cards.push({ id: uid('k'), lessonId: l.id, day: d, period: p, roomId: l.roomIds[0] || null, locked: false });
       if (conf.length) toast('⚠ ' + conf.join('; '), 4000);
       commit();
@@ -509,7 +519,7 @@ BIND.semua = () => {
 let worker = null;
 VIEWS.jana = () => {
   const st = stats(S), locked = S.cards.filter(c => c.locked).length;
-  return `<h1>Jana automatik</h1><p class="sub">Penjana meletakkan semua kad pelajaran tanpa pertembungan guru, kelas/kumpulan dan bilik, mengikut masa tidak tersedia.</p>
+  return `<h1>Jana automatik</h1><p class="sub">Penjana meletakkan semua kad pelajaran tanpa pertembungan guru, kelas/kumpulan dan bilik, mengikut masa tidak tersedia, kad berkunci dan <a href="#relasi">relasi</a>. Untuk jadual sekolah yang padat, beri 60 saat atau lebih.</p>
   <div class="panel">
     <div class="row">
       <label class="f">Had masa (saat)<input type="number" id="gSec" value="${ui.gSec || 20}" min="2" max="600" style="width:100px"></label>
@@ -681,6 +691,46 @@ BIND.fail = () => {
   $('#expXml').onclick = () => download(`${base}.xml`, exportAscXml(S), 'application/xml');
   $('#expCsv').onclick = () => download(`${base}.csv`, exportCsv(S), 'text/csv');
 };
+
+// ---------- relations ----------
+VIEWS.relasi = () => {
+  const ix = indexState(S), viol = findClashes(S, ix);
+  const badRel = r => { const ids = new Set(relationLessonIds(S, r)); return S.cards.some(c => ids.has(c.lessonId) && (viol.get(c.id) || []).some(m => m.startsWith('Relasi'))); };
+  return `<h1>Relasi</h1><p class="sub">Syarat antara pelajaran yang dipatuhi oleh penjana dan disemak dalam jadual. Diimport sekali dari fail aSc.</p>
+  <div class="panel"><div class="row" style="margin-bottom:10px"><button class="btn primary" id="addRel">+ Tambah relasi</button><span class="muted">${(S.relations || []).length} relasi</span></div>
+  <div class="scroll"><table class="tbl"><thead><tr><th>Jenis</th><th>Subjek</th><th>Kelas</th><th>Pelajaran terlibat</th><th>Status</th><th></th></tr></thead><tbody>
+  ${(S.relations || []).map(r => `<tr><td><a href="javascript:void 0" data-editr="${r.id}">${esc(RELATION_TYPES[r.type]?.label || r.type)}</a>${r.groupsOnly ? ' <span class="muted">(kumpulan sahaja)</span>' : ''}</td>
+    <td>${esc(r.subjectIds.map(s => ix.subject[s]?.short).join(', '))}</td><td>${esc(r.classIds.map(c => ix.cls[c]?.short).join(', ') || 'Semua')}</td>
+    <td>${relationLessonIds(S, r).length}</td>
+    <td>${r.type === 'lain' ? '<span class="badge">tidak disokong</span>' : badRel(r) ? '<span class="badge bad">dilanggar</span>' : '<span class="badge good">dipatuhi</span>'}</td>
+    <td style="text-align:right"><button class="btn sm danger" data-delr="${r.id}">Padam</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Tiada relasi.</td></tr>'}
+  </tbody></table></div></div>`;
+};
+BIND.relasi = () => {
+  $('#addRel').onclick = () => editRelation(null);
+  $$('[data-editr]').forEach(a => a.onclick = () => editRelation(a.dataset.editr));
+  $$('[data-delr]').forEach(b => b.onclick = async () => { if (!(await confirmBox('Padam relasi ini?'))) return; S.relations = S.relations.filter(r => r.id !== b.dataset.delr); commit(); });
+};
+function editRelation(id) {
+  const r = id ? S.relations.find(x => x.id === id) : { type: 'serentak', groupsOnly: true, subjectIds: [], classIds: [] };
+  const ss = new Set(r.subjectIds), cs = new Set(r.classIds);
+  modal(id ? 'Sunting relasi' : 'Tambah relasi', `
+    <label class="f">Jenis<select name="type">${Object.entries(RELATION_TYPES).filter(([k]) => k !== 'lain' || r.type === 'lain').map(([k, v]) => `<option value="${k}" ${k === r.type ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
+    <p class="muted" id="relHelp" style="margin:0">${esc(RELATION_TYPES[r.type]?.help || '')}</p>
+    <label><input type="checkbox" name="groupsOnly" ${r.groupsOnly ? 'checked' : ''}> Untuk pelajaran berkumpulan sahaja (bukan seluruh kelas)</label>
+    <div class="f">Subjek<div class="checklist">${S.subjects.map(s => `<label><input type="checkbox" name="s" value="${s.id}" ${ss.has(s.id) ? 'checked' : ''}> ${esc(s.short)} — ${esc(s.name)}</label>`).join('')}</div></div>
+    <div class="f">Kelas (kosong = semua kelas)<div class="checklist">${S.classes.map(c => `<label><input type="checkbox" name="c" value="${c.id}" ${cs.has(c.id) ? 'checked' : ''}> ${esc(c.short)}</label>`).join('')}</div></div>`, {
+    wide: true,
+    onOk: f => {
+      const subjectIds = $$('input[name=s]:checked', f).map(x => x.value);
+      if (!subjectIds.length) { toast('Pilih sekurang-kurangnya satu subjek'); return false; }
+      const o = id ? r : { id: uid('x') };
+      Object.assign(o, { type: f.type.value, groupsOnly: f.groupsOnly.checked, subjectIds, classIds: $$('input[name=c]:checked', f).map(x => x.value) });
+      if (!id) (S.relations ||= []).push(o);
+      commit();
+    } });
+  $('#modal select[name=type]').onchange = e => { $('#relHelp').textContent = RELATION_TYPES[e.target.value]?.help || ''; };
+}
 
 VIEWS.bantuan = () => `<h1>Bantuan</h1>
   <div class="panel">

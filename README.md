@@ -8,6 +8,8 @@ Tiada pelayan, tiada pangkalan data: semua data disimpan dalam pelayar pengguna 
 - **Data**: sekolah, hari, waktu (masa mula/tamat), subjek, guru, kelas (dengan kumpulan/pembahagian), bilik.
 - **Pelajaran**: subjek + kelas/kumpulan (termasuk kelas gabungan) + guru + bilik, kad seminggu × tempoh (waktu berkembar).
 - **Masa tidak tersedia** untuk guru, kelas, bilik dan subjek.
+- **Relasi**: mula serentak (kumpulan elektif), waktu sama setiap hari, tidak boleh hari sama, berturutan.
+- **Kad berkunci** tidak dialihkan oleh penjana.
 - **Penjana automatik** (Web Worker): letak semua kad tanpa pertembungan guru, kelas/kumpulan dan bilik; hormati kad berkunci.
 - **Susun manual**: seret & lepas kad, sorotan sel sah/tidak sah, amaran pertembungan, kunci kad.
 - **Paparan**: jadual setiap kelas/guru/bilik, dan gambaran "semua kelas/guru/bilik".
@@ -44,6 +46,7 @@ js/io.js              import/eksport (roz, XML, JSON, CSV)
 js/roz.js             pembaca format .roz/.rox (lihat docs/FORMAT-ROZ.md)
 js/zip.js             pembaca ZIP kecil (DecompressionStream)
 js/solver.js          algoritma penjana
+js/relations.js       relasi (semakan, padanan, jenis)
 js/generator-worker.js
 ```
 

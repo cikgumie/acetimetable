@@ -62,6 +62,17 @@ Kelas menyisipkan penanda `CString "CLASSTT"` sebelum nama dan berakhir dengan `
    Jika `int32` selepas `00 FFFFFFFF` kad sebelumnya bernilai 1, kad berikutnya menyimpan **indeks bilik
    yang ditetapkan** (cth. makmal untuk SC/KIM/BIO/FZ) di antara indeks pelajaran dan senarai:
    `lesson, room, n, senarai…`. Pembaca mengesan badan tetap kad (`waktu … 00 FFFFFFFF`) dan menyahkod ke belakang.
+   Bait ke-59 dari awal badan kad = **kad berkunci** (1 = dikunci).
+11. **Relasi** (selepas kad; pengepala objek biasa): `int32 5, CString keterangan, int32 n + n × indeksKelas,
+   int32 n + n × indeksSubjek, int32 jenis`. Jenis yang dikenal pasti:
+
+   | Kod | Maksud | Jadual Web |
+   |---|---|---|
+   | 1 | Tidak boleh pada hari sama | `tidakHariSama` |
+   | 5 | Dua subjek mesti berturutan | `berturutan` |
+   | 12 | Subjek untuk **kumpulan** kelas tersenarai mesti bermula serentak (dipadankan ikut tempoh kad yang sama; pelajaran seluruh kelas tidak terlibat) | `serentak` + `groupsOnly` |
+   | 13 | Subjek mesti pada masa sama dalam semua kelas dipilih | `serentak` |
+   | 14 | Subjek mesti pada waktu sama setiap hari | `waktuSama` |
 
 ## Pengesahan
 
@@ -75,5 +86,5 @@ Kedudukan, tempoh kad dan tanda × juga dibandingkan dengan tangkapan skrin prog
 
 ## Belum dinyahkod
 
-Kekangan lanjutan, murid & pilihan subjek, reka bentuk cetakan,
+Jenis relasi lain, tetapan guru (maks. waktu berterusan dsb.), murid & pilihan subjek, reka bentuk cetakan,
 dan format lama (< v600). Untuk fail versi lain, eksport XML dari aplikasi asal dan import XML.

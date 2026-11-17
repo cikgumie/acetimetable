@@ -1,4 +1,5 @@
 // Data model, persistence and clash detection.
+import { relationViolations } from './relations.js';
 
 export const DEFAULT_DAYS = [
   { name: 'Isnin', short: 'Isn' }, { name: 'Selasa', short: 'Sel' }, { name: 'Rabu', short: 'Rab' },
@@ -20,7 +21,7 @@ export function emptyState() {
       const s = 7 * 60 + 30 + i * 30, e = s + 30, f = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
       return { name: String(i + 1), short: String(i + 1), start: f(s), end: f(e) };
     }),
-    subjects: [], teachers: [], rooms: [], classes: [], groups: [], lessons: [], cards: [],
+    subjects: [], teachers: [], rooms: [], classes: [], groups: [], lessons: [], cards: [], relations: [],
     timeoff: {}, // key "t:<id>" | "c:<id>" | "r:<id>" | "s:<id>" -> ["d-p", ...] blocked slots
     relief: {},  // date -> { absent: [teacherId], assign: { cardId|day-period key: teacherId } }
   };
@@ -38,7 +39,7 @@ export function saveLocal(state) {
 export function normalize(s) {
   const base = emptyState();
   const out = { ...base, ...s };
-  for (const k of ['subjects', 'teachers', 'rooms', 'classes', 'groups', 'lessons', 'cards']) out[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ['subjects', 'teachers', 'rooms', 'classes', 'groups', 'lessons', 'cards', 'relations']) out[k] = Array.isArray(s[k]) ? s[k] : [];
   out.timeoff = s.timeoff || {}; out.relief = s.relief || {};
   // every class needs an "entire class" group
   for (const c of out.classes) ensureEntireGroup(out, c.id);
@@ -112,6 +113,7 @@ export function findClashes(s, ix = indexState(s)) {
       for (const key of keys) if ((s.timeoff[key] || []).includes(k)) add(c.id, 'Masa tidak tersedia');
     }
   }
+  for (const [id, msgs] of relationViolations(s, ix)) for (const m of msgs) add(id, m);
   return res;
 }
 
